@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador Urna Eletrônica</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #2c3e50; touch-action: manipulation; font-family: 'Arial', sans-serif; }
+        .urna-casing { background: linear-gradient(135deg, #e8e8e8 0%, #c4c4c4 100%); box-shadow: inset -2px -2px 10px rgba(0,0,0,0.1), inset 2px 2px 10px rgba(255,255,255,0.8), 10px 15px 30px rgba(0,0,0,0.5); border-bottom: 16px solid #a3a3a3; border-right: 6px solid #a3a3a3; }
+        .screen-bezel { background-color: #e5e5e5; box-shadow: inset 0px 0px 5px rgba(0,0,0,0.2); border: 1px solid #d4d4d4; }
+        .screen-display { background-color: #f4f6f7; border: 16px solid #1a1a1a; border-radius: 4px; box-shadow: inset 0px 0px 8px rgba(0,0,0,0.1); }
+        .btn-numeric { background-color: #1f1f1f; color: #ffffff; font-weight: bold; font-size: 1.25rem; border-radius: 4px; box-shadow: 0px 6px 0px #0a0a0a, 0px 6px 5px rgba(0,0,0,0.5); transition: all 0.05s ease; position: relative; display: flex; align-items: center; justify-content: center; padding-bottom: 8px; padding-top: 4px; }
+        .btn-numeric:active { transform: translateY(6px); box-shadow: 0px 0px 0px #0a0a0a, 0px 0px 2px rgba(0,0,0,0.5); }
+        .btn-action { font-weight: 800; font-size: 0.75rem; color: #111; text-transform: uppercase; border-radius: 3px; transition: all 0.05s ease; box-shadow: 0px 5px 0px rgba(0,0,0,0.3), 0px 5px 5px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; position: relative; padding-bottom: 4px; }
+        .btn-action:active { transform: translateY(5px); box-shadow: 0px 0px 0px rgba(0,0,0,0.3), 0px 0px 2px rgba(0,0,0,0.4); }
+        .btn-branco { background-color: #fefefe; box-shadow: 0px 5px 0px #cccccc, 0px 5px 5px rgba(0,0,0,0.4); }
+        .btn-branco:active { box-shadow: 0px 0px 0px #cccccc; }
+        .btn-corrige { background-color: #f97316; box-shadow: 0px 5px 0px #c2410c, 0px 5px 5px rgba(0,0,0,0.4); }
+        .btn-corrige:active { box-shadow: 0px 0px 0px #c2410c; }
+        .btn-confirma { background-color: #16a34a; box-shadow: 0px 5px 0px #14532d, 0px 5px 5px rgba(0,0,0,0.4); height: 115%; align-self: flex-end; }
+        .btn-confirma:active { box-shadow: 0px 0px 0px #14532d; }
+        .braille { position: absolute; bottom: 3px; right: 4px; font-size: 10px; color: #444; letter-spacing: 1px; text-shadow: 1px 1px 0px rgba(255,255,255,0.1); }
+        .btn-branco .braille, .btn-corrige .braille, .btn-confirma .braille { color: rgba(0,0,0,0.4); font-size: 12px; right: 6px; }
+        .foto-container-fixo { width: 120px; height: 160px; flex-shrink: 0; border: 2px solid transparent; }
+        .foto-candidato { width: 100%; height: 100%; object-fit: cover; border: 2px solid #333; }
+        .blinking { animation: blink 1s step-end infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .brasao { filter: grayscale(100%) opacity(0.7) contrast(1.5); }
+    </style>
+</head>
+<body class="h-screen w-screen flex items-center justify-center p-4">
+
+    <!-- URNA -->
+    <div class="urna-casing rounded-xl flex w-full max-w-5xl h-[85vh] max-h-[600px] p-6 gap-6 relative select-none">
+        
+        <!-- TELA -->
+        <div class="screen-bezel w-[65%] h-full rounded-lg p-4 flex">
+            <div class="screen-display w-full h-full relative overflow-hidden flex flex-col p-4 bg-white text-gray-900">
+                <div onclick="abrirAdminComSenha()" class="absolute top-0 left-0 w-16 h-16 cursor-pointer z-50 bg-transparent"></div>
+                <div onclick="abrirMesario()" class="absolute top-0 right-0 w-16 h-16 cursor-pointer z-50 bg-transparent"></div>
+
+                <div id="tela-aguardando" class="flex flex-col items-center justify-center h-full w-full">
+                    <h1 class="text-4xl font-black text-gray-800 tracking-tighter mb-6">URNA ELETRÔNICA</h1>
+                    <div class="blinking text-2xl font-bold text-gray-800">AGUARDANDO LIBERAÇÃO</div>
+                </div>
+
+                <div id="tela-votando" class="hidden h-full w-full flex-col justify-between">
+                    <div class="flex justify-between items-start">
+                        <div class="text-xl font-bold">SEU VOTO PARA:</div>
+                        <div class="text-3xl font-black">REPRESENTANTE</div>
+                    </div>
+                    <div class="flex justify-between mt-4 flex-grow w-full">
+                        <div class="flex flex-col flex-grow">
+                            <div class="flex items-center gap-2 mb-4">
+                                <span class="text-lg font-bold w-20">Número:</span>
+                                <div class="flex gap-2">
+                                    <div id="digito-1" class="w-10 h-12 border-2 border-gray-800 flex items-center justify-center text-3xl font-bold"></div>
+                                    <div id="digito-2" class="w-10 h-12 border-2 border-gray-800 flex items-center justify-center text-3xl font-bold"></div>
+                                </div>
+                            </div>
+                            <div id="info-candidato" class="flex flex-col gap-2 mt-4 opacity-0 transition-opacity">
+                                <div class="text-xl">Nome: <span id="nome-candidato" class="font-bold"></span></div>
+                                <div class="text-xl">Partido: <span id="partido-candidato" class="font-bold"></span></div>
+                            </div>
+                            <div id="aviso-voto" class="text-3xl font-bold mt-4 blinking hidden"></div>
+                        </div>
+                        <div class="foto-container-fixo flex flex-col items-center">
+                            <img id="img-candidato" src="" class="foto-candidato bg-gray-200 hidden grayscale" alt="Foto">
+                            <div id="legenda-candidato" class="text-xs font-bold mt-1 hidden tracking-widest text-gray-800">CANDIDATO</div>
+                        </div>
+                    </div>
+                    <div class="border-t-2 border-gray-400 pt-2 text-sm mt-4">
+                        Aperte a tecla:<br>
+                        <span class="font-bold text-green-700">VERDE</span> para CONFIRMAR este voto<br>
+                        <span class="font-bold text-orange-600">LARANJA</span> para REINICIAR este voto
+                    </div>
+                </div>
+
+                <div id="tela-fim" class="hidden flex items-center justify-center h-full w-full">
+                    <div class="text-[120px] font-black tracking-tighter">FIM</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TECLADO -->
+        <div class="w-[35%] h-full flex flex-col">
+            <div class="w-full flex justify-end items-center mb-6 pr-2 gap-3">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/b/bf/Coat_of_arms_of_Brazil.svg" class="w-14 h-14 brasao" alt="Brasão">
+                <div class="text-right leading-none mt-1">
+                    <span class="block font-black text-gray-800 text-xl tracking-tighter">JUSTIÇA</span>
+                    <span class="block font-black text-gray-800 text-xl tracking-tighter">ELEITORAL</span>
+                </div>
+            </div>
+
+            <div class="bg-[#1a1a1a] rounded-lg p-5 w-full mb-6 relative shadow-inner">
+                <div class="grid grid-cols-3 gap-x-5 gap-y-4">
+                    <button onclick="digitar('1')" class="btn-numeric h-12">1<span class="braille">⠁</span></button>
+                    <button onclick="digitar('2')" class="btn-numeric h-12">2<span class="braille">⠃</span></button>
+                    <button onclick="digitar('3')" class="btn-numeric h-12">3<span class="braille">⠉</span></button>
+                    <button onclick="digitar('4')" class="btn-numeric h-12">4<span class="braille">⠙</span></button>
+                    <button onclick="digitar('5')" class="btn-numeric h-12">5<span class="braille">⠑</span></button>
+                    <button onclick="digitar('6')" class="btn-numeric h-12">6<span class="braille">⠋</span></button>
+                    <button onclick="digitar('7')" class="btn-numeric h-12">7<span class="braille">⠛</span></button>
+                    <button onclick="digitar('8')" class="btn-numeric h-12">8<span class="braille">⠓</span></button>
+                    <button onclick="digitar('9')" class="btn-numeric h-12">9<span class="braille">⠊</span></button>
+                    <div></div>
+                    <button onclick="digitar('0')" class="btn-numeric h-12">0<span class="braille">⠚</span></button>
+                    <div></div>
+                </div>
+            </div>
+
+            <div class="w-full flex justify-between gap-3 mt-auto mb-2 px-1 items-end h-16">
+                <button onclick="votarBranco()" class="btn-action btn-branco h-12 flex-1">BRANCO<span class="braille">⠃</span></button>
+                <button onclick="corrige()" class="btn-action btn-corrige h-12 flex-1">CORRIGE<span class="braille">⠉</span></button>
+                <button onclick="confirma()" class="btn-action btn-confirma flex-1">CONFIRMA<span class="braille">⠋</span></button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- MODAIS E OVERLAYS -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/70 hidden z-[100] items-center justify-center p-4 backdrop-blur-sm">
+        <div id="modal-senha" class="bg-white rounded-lg p-6 w-96 shadow-2xl hidden">
+            <h2 id="titulo-senha" class="text-2xl font-bold mb-4 text-center">Senha</h2>
+            <form onsubmit="validarSenha(event)" class="flex flex-col gap-4">
+                <input type="password" id="input-senha" class="w-full border-2 border-gray-300 p-3 rounded-lg text-center text-xl tracking-[0.5em]" autocomplete="off">
+                <div id="erro-senha" class="text-red-500 font-bold text-center hidden">Senha Incorreta!</div>
+                <div class="flex gap-2">
+                    <button type="button" onclick="fecharModal()" class="flex-1 bg-gray-200 p-3 rounded-lg font-bold">Cancelar</button>
+                    <button type="submit" class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold">Confirmar</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="modal-admin" class="bg-white rounded-lg w-full max-w-4xl h-[80vh] shadow-2xl hidden flex-col overflow-hidden">
+            <div class="flex bg-gray-800 text-white">
+                <button onclick="mudarAba('cadastro')" id="tab-cadastro" class="flex-1 py-4 font-bold bg-gray-700">Candidatos</button>
+                <button onclick="mudarAba('apuracao')" id="tab-apuracao" class="flex-1 py-4 font-bold">Apuração Animada</button>
+                <button onclick="mudarAba('nuvem')" id="tab-nuvem" class="flex-1 py-4 font-bold bg-blue-900">Nuvem (Sync)</button>
+                <button onclick="fecharModal()" class="px-6 bg-red-600 font-bold">FECHAR</button>
+            </div>
+
+            <!-- Aba Cadastro -->
+            <div id="aba-cadastro" class="flex-1 p-6 flex gap-6 overflow-y-auto bg-gray-50">
+                <div class="flex-1 bg-white p-6 rounded-lg shadow border">
+                    <h3 class="text-xl font-bold mb-4 border-b pb-2">Novo Candidato</h3>
+                    <div class="flex flex-col gap-4">
+                        <input type="text" id="cad-nome" class="border p-2 rounded" placeholder="Nome">
+                        <input type="text" id="cad-partido" class="border p-2 rounded" placeholder="Partido">
+                        <input type="number" id="cad-numero" class="border p-2 rounded text-xl" placeholder="Número (ex: 10)">
+                        <input type="file" id="cad-foto" accept="image/*" class="border p-2 rounded">
+                        <button onclick="salvarCandidato()" class="bg-green-600 text-white font-bold py-3 rounded">Salvar</button>
+                    </div>
+                </div>
+                <div class="w-[40%] bg-white p-6 rounded-lg shadow border flex flex-col">
+                    <h3 class="text-xl font-bold mb-4 border-b pb-2">Cadastrados</h3>
+                    <div id="lista-candidatos" class="flex-1 overflow-y-auto flex flex-col gap-3"></div>
+                </div>
+            </div>
+
+            <!-- Aba Apuração -->
+            <div id="aba-apuracao" class="hidden flex-1 p-6 flex-col overflow-hidden bg-gray-50">
+                <div class="flex justify-between items-center mb-4 border-b pb-4">
+                    <h3 class="text-2xl font-black text-gray-800">Resultado Final</h3>
+                    <button onclick="zerarUrna()" class="bg-red-600 text-white font-bold px-4 py-2 rounded">Zerar Urna (Reiniciar Tudo)</button>
+                </div>
+                <div id="resultado-apuracao" class="flex-1 overflow-y-auto p-2"></div>
+            </div>
+
+            <!-- Aba Nuvem -->
+            <div id="aba-nuvem" class="hidden flex-1 p-6 flex-col items-center justify-center bg-gray-50 gap-6">
+                <h2 class="text-2xl font-bold text-gray-800">Sincronização Nuvem</h2>
+                <p class="text-gray-600 text-center max-w-md">Ligue a internet do iPad rapidinho para baixar os alunos ou enviar os votos finais.</p>
+                <div class="flex gap-4">
+                    <button onclick="baixarDaNuvem()" class="bg-blue-600 text-white font-bold px-8 py-4 rounded-lg shadow-lg hover:bg-blue-700">⬇️ Baixar Candidatos</button>
+                    <button onclick="enviarParaNuvem()" class="bg-green-600 text-white font-bold px-8 py-4 rounded-lg shadow-lg hover:bg-green-700">⬆️ Enviar Votos</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // AUDIO SINTETIZADO (Offline e Imediato)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function tocarBeepCurto() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(2200, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function tocarBeepLongo() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const tempo = audioCtx.currentTime;
+            
+            for (let i = 0; i < 4; i++) {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(2200, tempo + (i * 0.12));
+                gain.gain.setValueAtTime(0.5, tempo + (i * 0.12));
+                gain.gain.setValueAtTime(0.01, tempo + (i * 0.12) + 0.08);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(tempo + (i * 0.12));
+                osc.stop(tempo + (i * 0.12) + 0.08);
+            }
+            
+            const oscFim = audioCtx.createOscillator();
+            const gainFim = audioCtx.createGain();
+            oscFim.type = 'sine';
+            oscFim.frequency.setValueAtTime(2200, tempo + 0.48);
+            gainFim.gain.setValueAtTime(0.5, tempo + 0.48);
+            gainFim.gain.setValueAtTime(0.5, tempo + 1.8);
+            gainFim.gain.exponentialRampToValueAtTime(0.01, tempo + 1.9);
+            oscFim.connect(gainFim);
+            gainFim.connect(audioCtx.destination);
+            oscFim.start(tempo + 0.48);
+            oscFim.stop(tempo + 1.9);
+        }
+
+        // DADOS E ESTADO
+        let estado = 'AGUARDANDO', votoAtual = '', isBranco = false, acaoAposSenha = null;
+        const SENHA_MESTRE = "1234";
+
+        if(!localStorage.getItem('urna_candidatos')) localStorage.setItem('urna_candidatos', JSON.stringify([]));
+        if(!localStorage.getItem('urna_votos')) localStorage.setItem('urna_votos', JSON.stringify({ brancos: 0, nulos: 0, nominais: {} }));
+
+        function getCandidatos() { return JSON.parse(localStorage.getItem('urna_candidatos')); }
+        function getVotos() { return JSON.parse(localStorage.getItem('urna_votos')); }
+        function salvarVotos(votos) { localStorage.setItem('urna_votos', JSON.stringify(votos)); }
+
+        // CONTROLE DA URNA
+        function setTela(novaTela) {
+            document.getElementById('tela-aguardando').classList.add('hidden');
+            document.getElementById('tela-votando').classList.add('hidden');
+            document.getElementById('tela-fim').classList.add('hidden');
+            
+            if(novaTela === 'AGUARDANDO') {
+                estado = 'AGUARDANDO';
+                document.getElementById('tela-aguardando').classList.remove('hidden');
+            } else if(novaTela === 'VOTANDO') {
+                estado = 'VOTANDO';
+                document.getElementById('tela-votando').classList.remove('hidden');
+                document.getElementById('tela-votando').classList.add('flex');
+                corrige();
+            } else if(novaTela === 'FIM') {
+                estado = 'FIM';
+                document.getElementById('tela-fim').classList.remove('hidden');
+                document.getElementById('tela-fim').classList.add('flex');
+                tocarBeepLongo();
+                setTimeout(() => setTela('AGUARDANDO'), 3000);
+            }
+        }
+
+        window.atualizarDisplay = function() {
+            const digitos = votoAtual.padEnd(2, ' ').split('');
+            document.getElementById('digito-1').textContent = digitos[0];
+            document.getElementById('digito-2').textContent = digitos[1];
+            
+            const info = document.getElementById('info-candidato');
+            const img = document.getElementById('img-candidato');
+            const legenda = document.getElementById('legenda-candidato');
+            const aviso = document.getElementById('aviso-voto');
+            
+            info.classList.add('opacity-0'); 
+            img.classList.add('hidden'); 
+            if(legenda) legenda.classList.add('hidden'); 
+            aviso.classList.add('hidden'); 
+            aviso.classList.remove('blinking'); 
+            img.src = '';
+
+            if (isBranco) {
+                aviso.textContent = 'VOTO EM BRANCO'; 
+                aviso.classList.remove('hidden'); 
+                aviso.classList.add('blinking');
+            } else if (votoAtual.length === 2) {
+                const candidato = getCandidatos().find(c => c.numero === votoAtual && !c.eliminado);
+                if (candidato) {
+                    document.getElementById('nome-candidato').textContent = candidato.nome;
+                    document.getElementById('partido-candidato').textContent = candidato.partido;
+                    if(candidato.foto) { 
+                        img.src = candidato.foto; 
+                        img.classList.remove('hidden'); 
+                        if(legenda) legenda.classList.remove('hidden'); 
+                    }
+                    info.classList.remove('opacity-0');
+                } else {
+                    aviso.textContent = 'VOTO NULO'; 
+                    aviso.classList.remove('hidden'); 
+                    aviso.classList.add('blinking');
+                }
+            }
+        }
+
+        window.digitar = function(num) { if (estado !== 'VOTANDO' || isBranco) return; tocarBeepCurto(); if (votoAtual.length < 2) { votoAtual += num; atualizarDisplay(); } }
+        window.corrige = function() { if (estado !== 'VOTANDO') return; tocarBeepCurto(); votoAtual = ''; isBranco = false; atualizarDisplay(); }
+        window.votarBranco = function() { if (estado !== 'VOTANDO') return; tocarBeepCurto(); votoAtual = ''; isBranco = true; atualizarDisplay(); }
+        
+        window.confirma = function() {
+            if (estado !== 'VOTANDO') return;
+            if (votoAtual.length === 2 || isBranco) {
+                const votos = getVotos();
+                if (isBranco) votos.brancos += 1;
+                else {
+                    const existe = getCandidatos().find(c => c.numero === votoAtual && !c.eliminado);
+                    if (existe) votos.nominais[votoAtual] = (votos.nominais[votoAtual] || 0) + 1;
+                    else votos.nulos += 1;
+                }
+                salvarVotos(votos); setTela('FIM');
+            }
+        }
+
+        // SENHA E MENUS
+        window.abrirMesario = function() { if(estado !== 'AGUARDANDO') return; acaoAposSenha = 'liberar'; document.getElementById('titulo-senha').textContent = "Liberar Urna"; mostrarSenha(); }
+        window.abrirAdminComSenha = function() { acaoAposSenha = 'admin'; document.getElementById('titulo-senha').textContent = "Acesso Restrito"; mostrarSenha(); }
+        function mostrarSenha() { document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('modal-overlay').classList.add('flex'); document.getElementById('modal-senha').classList.remove('hidden'); document.getElementById('erro-senha').classList.add('hidden'); document.getElementById('input-senha').value = ''; setTimeout(() => document.getElementById('input-senha').focus(), 100); }
+        window.fecharModal = function() { document.getElementById('modal-overlay').classList.add('hidden'); document.getElementById('modal-overlay').classList.remove('flex'); document.getElementById('modal-senha').classList.add('hidden'); document.getElementById('modal-admin').classList.add('hidden'); }
+        
+        window.validarSenha = function(e) {
+            e.preventDefault();
+            if (document.getElementById('input-senha').value.trim() === SENHA_MESTRE) {
+                const acao = acaoAposSenha;
+                document.getElementById('modal-senha').classList.add('hidden');
+                if (acao === 'liberar') { document.getElementById('modal-overlay').classList.add('hidden'); document.getElementById('modal-overlay').classList.remove('flex'); setTela('VOTANDO'); }
+                else if (acao === 'admin') { document.getElementById('modal-admin').classList.remove('hidden'); document.getElementById('modal-admin').classList.add('flex'); mudarAba('cadastro'); }
+            } else { document.getElementById('erro-senha').classList.remove('hidden'); }
+        }
+
+        window.mudarAba = function(aba) {
+            ['cadastro', 'apuracao', 'nuvem'].forEach(a => { document.getElementById(`aba-${a}`).classList.add('hidden'); document.getElementById(`aba-${a}`).classList.remove('flex'); document.getElementById(`tab-${a}`).classList.remove('bg-gray-700', 'bg-blue-800'); });
+            document.getElementById(`aba-${aba}`).classList.remove('hidden'); document.getElementById(`aba-${aba}`).classList.add('flex');
+            if(aba === 'cadastro') { document.getElementById('tab-cadastro').classList.add('bg-gray-700'); renderListaCandidatos(); }
+            if(aba === 'apuracao') { document.getElementById('tab-apuracao').classList.add('bg-gray-700'); renderPreApuracao(); }
+            if(aba === 'nuvem') { document.getElementById('tab-nuvem').classList.add('bg-blue-800'); }
+        }
+
+        // CADASTRO
+        function compressImage(file, callback) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width, height = img.height;
+                    if (width > 150) { height *= 150 / width; width = 150; }
+                    canvas.width = width; canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    callback(canvas.toDataURL('image/jpeg', 0.8));
+                }
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        window.salvarCandidato = function() {
+            const nome = document.getElementById('cad-nome').value.trim(), partido = document.getElementById('cad-partido').value.trim();
+            let numero = document.getElementById('cad-numero').value.trim();
+            const file = document.getElementById('cad-foto').files[0];
+            if(!nome || !numero) return alert("Nome e Número obrigatórios!");
+            numero = numero.padStart(2, '0');
+            const candidatos = getCandidatos();
+            if(candidatos.find(c => c.numero === numero)) return alert("Número já existe!");
+            
+            const salvar = (foto) => { 
+                candidatos.push({ nome, partido, numero, foto, eliminado: false }); 
+                localStorage.setItem('urna_candidatos', JSON.stringify(candidatos)); 
+                window.renderListaCandidatos(); 
+            };
+            file ? compressImage(file, salvar) : salvar("");
+        }
+
+        window.renderListaCandidatos = function() {
+            document.getElementById('lista-candidatos').innerHTML = getCandidatos().map(c => `
+                <div class="flex justify-between items-center bg-gray-100 p-2 rounded ${c.eliminado ? 'opacity-40' : ''}">
+                    <div><b>${c.numero}</b> - ${c.nome} ${c.eliminado ? '<span class="text-red-500 text-xs font-bold">(Eliminado)</span>' : ''}</div>
+                    <button onclick="removerCandidato('${c.numero}')" class="text-red-600 font-bold">X</button>
+                </div>
+            `).join('');
+        }
+        
+        window.removerCandidato = function(num) { 
+            if(confirm('Remover definitivamente?')) { 
+                localStorage.setItem('urna_candidatos', JSON.stringify(getCandidatos().filter(c => c.numero !== num))); 
+                window.renderListaCandidatos(); 
+            } 
+        }
+
+        window.zerarUrna = function() {
+            if(confirm('Zerar todos os votos e restaurar todos os candidatos eliminados para um 1º Turno?')) {
+                let candidatos = getCandidatos();
+                candidatos = candidatos.map(c => { c.eliminado = false; return c; });
+                localStorage.setItem('urna_candidatos', JSON.stringify(candidatos));
+                localStorage.setItem('urna_votos', JSON.stringify({ brancos: 0, nulos: 0, nominais: {} }));
+                window.renderPreApuracao();
+                window.renderListaCandidatos();
+            }
+        }
+
+        // LÓGICA DO 2º TURNO E APURAÇÃO ANIMADA
+        window.prepararSegundoTurno = function() {
+            if(confirm("Iniciar o 2º Turno? Os votos serão zerados e os eliminados ficarão ocultos na urna.")) {
+                let candidatos = getCandidatos();
+                const votos = getVotos();
+                const ranking = candidatos.map(c => ({ ...c, votos: votos.nominais[c.numero] || 0 })).sort((a, b) => b.votos - a.votos);
+                const maxVotos = ranking.length > 0 ? ranking[0].votos : 0;
+                const empatados = ranking.filter(c => c.votos === maxVotos).map(c => c.numero);
+                
+                candidatos = candidatos.map(c => {
+                    c.eliminado = !empatados.includes(c.numero);
+                    return c;
+                });
+                
+                localStorage.setItem('urna_candidatos', JSON.stringify(candidatos));
+                localStorage.setItem('urna_votos', JSON.stringify({ brancos: 0, nulos: 0, nominais: {} }));
+                
+                alert("2º Turno configurado. Números de alunos eliminados gerarão Voto Nulo.");
+                window.mudarAba('cadastro');
+            }
+        }
+
+        window.renderPreApuracao = function() {
+            const container = document.getElementById('resultado-apuracao'), candidatos = getCandidatos(), votos = getVotos();
+            let totalValidos = Object.values(votos.nominais).reduce((a, b) => a + b, 0);
+            
+            // Filtra os eliminados para não aparecerem no gráfico
+            let ranking = candidatos.filter(c => !c.eliminado).map(c => ({ ...c, votos: votos.nominais[c.numero] || 0 })).sort((a, b) => b.votos - a.votos);
+
+            let html = `<div class="flex justify-center mb-8 mt-4"><button id="btn-revelar" onclick="iniciarAnimacaoApuracao()" class="bg-purple-600 text-white font-black text-2xl px-10 py-5 rounded-xl shadow-[0_10px_0_#4c1d95] hover:bg-purple-500 active:translate-y-2 active:shadow-[0_0px_0_#4c1d95] transition-all flex items-center gap-3"><span class="text-4xl">🏆</span> INICIAR APURAÇÃO</button></div><div class="flex flex-col gap-4">`;
+            
+            ranking.forEach((c, index) => {
+                let perc = totalValidos > 0 ? ((c.votos / totalValidos) * 100).toFixed(1) : 0;
+                let isVencedor = index === 0 && c.votos > 0;
+                html += `
+                    <div class="bg-white p-3 rounded-xl border-2 border-gray-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+                        <div class="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0 z-10">${c.foto ? `<img src="${c.foto}" class="w-full h-full object-cover grayscale">` : ''}</div>
+                        <div class="flex-1 z-10">
+                            <div class="font-bold text-xl text-gray-800">${c.nome} <span class="text-gray-400 text-sm">(${c.numero})</span></div>
+                            <div class="w-full bg-gray-100 rounded-full h-8 mt-2 overflow-hidden shadow-inner relative"><div class="bg-gradient-to-r from-blue-500 to-blue-700 h-8 rounded-full transition-all ease-out" style="width: 0%; transition-duration: 3500ms;" data-final-width="${perc}%" id="barra-${c.numero}"></div></div>
+                        </div>
+                        <div class="text-right min-w-[100px] z-10 bg-white/80 p-2 rounded"><div class="text-4xl font-black text-blue-700 font-mono" id="contador-${c.numero}" data-final-votos="${c.votos}">0</div><div class="text-sm text-gray-500 font-bold"><span id="perc-${c.numero}">0</span>%</div></div>
+                        ${isVencedor ? `<div id="coroa" class="absolute top-2 left-1/2 text-5xl opacity-0 transition-all duration-1000 transform -translate-y-4 scale-50 z-20 drop-shadow-lg">👑</div>` : ''}
+                    </div>`;
+            });
+            html += `<div class="flex gap-4 mt-6 opacity-0 transition-opacity duration-1000" id="brancos-nulos-box"><div class="flex-1 bg-gray-200 p-4 rounded-xl border text-center"><div class="text-gray-500 font-bold uppercase tracking-wider">Brancos</div><div class="text-3xl font-black text-gray-700">${votos.brancos}</div></div><div class="flex-1 bg-gray-200 p-4 rounded-xl border text-center"><div class="text-gray-500 font-bold uppercase tracking-wider">Nulos</div><div class="text-3xl font-black text-gray-700">${votos.nulos}</div></div></div></div>`;
+            container.innerHTML = html;
+        }
+
+        window.iniciarAnimacaoApuracao = function() {
+            document.getElementById('btn-revelar').style.display = 'none';
+            const candidatos = getCandidatos(), duracao = 3500, frames = duracao / 30;
+            let suspenseInterval = setInterval(() => tocarBeepCurto(), 250);
+
+            const ativos = candidatos.filter(c => !c.eliminado);
+
+            ativos.forEach(c => {
+                const barra = document.getElementById(`barra-${c.numero}`);
+                const contador = document.getElementById(`contador-${c.numero}`);
+                const percText = document.getElementById(`perc-${c.numero}`);
+                if(!barra || !contador) return;
+                
+                const finalWidth = barra.getAttribute('data-final-width');
+                const finalVotos = parseInt(contador.getAttribute('data-final-votos'));
+                
+                setTimeout(() => { barra.style.width = finalWidth; }, 50);
+                
+                let incremento = finalVotos / frames, valor = 0;
+                let numInterval = setInterval(() => {
+                    valor += incremento; 
+                    if(valor >= finalVotos) { valor = finalVotos; clearInterval(numInterval); }
+                    contador.textContent = Math.floor(valor);
+                    let v = getVotos(), tot = Object.values(v.nominais).reduce((a, b) => a + b, 0);
+                    if(tot > 0) percText.textContent = ((Math.floor(valor) / tot) * 100).toFixed(1);
+                }, 30);
+            });
+
+            setTimeout(() => {
+                clearInterval(suspenseInterval); tocarBeepLongo();
+                const boxExtras = document.getElementById('brancos-nulos-box'); 
+                if(boxExtras) boxExtras.classList.remove('opacity-0');
+                
+                const votos = getVotos();
+                const ranking = ativos.map(c => ({ ...c, votos: votos.nominais[c.numero] || 0 })).sort((a, b) => b.votos - a.votos);
+                
+                if (ranking.length > 0) {
+                    const maxVotos = ranking[0].votos;
+                    const empatados = ranking.filter(c => c.votos === maxVotos);
+
+                    // Alerta de 2º Turno caso haja empate no 1º lugar
+                    if (empatados.length > 1 && maxVotos > 0) {
+                        const container = document.getElementById('resultado-apuracao');
+                        const aviso = document.createElement('div');
+                        aviso.innerHTML = `
+                            <div class="mt-8 bg-yellow-100 border-4 border-yellow-400 p-6 rounded-xl text-center shadow-lg">
+                                <h2 class="text-3xl font-black text-yellow-700 mb-4">⚠️ EMPATE!</h2>
+                                <button onclick="prepararSegundoTurno()" class="bg-yellow-600 text-white font-black text-xl px-8 py-4 rounded-lg shadow-md hover:bg-yellow-700 transition-all">
+                                    INICIAR 2º TURNO
+                                </button>
+                            </div>
+                        `;
+                        container.appendChild(aviso);
+                    } else {
+                        const coroa = document.getElementById('coroa'); 
+                        if(coroa) { 
+                            coroa.classList.remove('opacity-0', '-translate-y-4', 'scale-50'); 
+                            coroa.classList.add('translate-y-0', 'scale-100'); 
+                        }
+                    }
+                }
+            }, duracao);
+        }
+    </script>
+
+    <!-- FIREBASE SDK (Mantenha configurado apenas se for usar a nuvem) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            // COLOQUE SUAS CHAVES DO FIREBASE AQUI
+            
+        };
+
+        let db;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+        } catch(e) {
+            console.log("Firebase aguardando chaves...");
+        }
+
+        window.baixarDaNuvem = async function() {
+            if(!db) return alert("Configure as chaves do Firebase primeiro!");
+            document.querySelector('#aba-nuvem button').textContent = "Baixando...";
+            try {
+                const docSnap = await getDoc(doc(db, "eleicao", "escola"));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if(data.candidatos) localStorage.setItem('urna_candidatos', JSON.stringify(data.candidatos));
+                    if(data.votos) localStorage.setItem('urna_votos', JSON.stringify(data.votos));
+                    alert("Candidatos e votos baixados com sucesso!");
+                    window.renderListaCandidatos();
+                } else {
+                    alert("Ainda não há dados salvos na nuvem.");
+                }
+            } catch (e) {
+                alert("Erro ao conectar: Verifique se configurou o Firestore no modo teste.");
+            }
+            document.querySelector('#aba-nuvem button').innerHTML = "⬇️ Baixar Candidatos";
+        }
+
+        window.enviarParaNuvem = async function() {
+            if(!db) return alert("Configure as chaves do Firebase primeiro!");
+            document.querySelectorAll('#aba-nuvem button')[1].textContent = "Enviando...";
+            try {
+                await setDoc(doc(db, "eleicao", "escola"), {
+                    candidatos: window.getCandidatos(),
+                    votos: window.getVotos()
+                });
+                alert("Resultados salvos na Nuvem de forma segura!");
+            } catch (e) {
+                alert("Erro ao enviar: Verifique as regras de segurança do Firestore.");
+            }
+            document.querySelectorAll('#aba-nuvem button')[1].innerHTML = "⬆️ Enviar Votos";
+        }
+		<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyAtPGtdC1Wu3QQLR5fNRXmmDfutWm0xmdU",
+    authDomain: "urna-96ea1.firebaseapp.com",
+    projectId: "urna-96ea1",
+    storageBucket: "urna-96ea1.firebasestorage.app",
+    messagingSenderId: "220526927178",
+    appId: "1:220526927178:web:4806057f67722d542cf5b3"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+</script>
+    </script>
+</body>
+</html>
